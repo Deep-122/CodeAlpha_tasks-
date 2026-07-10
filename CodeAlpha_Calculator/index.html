@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deepcount — Precision Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --body-bg: #100f0e;
+    --panel: #211f1c;
+    --panel-edge: #322f2a;
+    --screen-bg: #0a0c08;
+    --amber: #ff9a4d;
+    --amber-dim: #a85c26;
+    --trace: #4f9c86;
+    --trace-dim: #2c463e;
+    --key: #35322d;
+    --key-hi: #403c35;
+    --ink: #ece5d8;
+    --ink-dim: #837c70;
+    --danger: #c65b4e;
+    --radius: 14px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    height:100%;
+    margin:0;
+  }
+
+  body{
+    background:
+      radial-gradient(ellipse at 50% -10%, #1c1a17 0%, var(--body-bg) 55%);
+    color: var(--ink);
+    font-family:'Space Grotesk', sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding: 32px 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .rig{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:18px;
+  }
+
+  .plate{
+    font-size:11px;
+    letter-spacing:0.32em;
+    text-transform:uppercase;
+    color: var(--ink-dim);
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .plate::before, .plate::after{
+    content:'';
+    width:22px;
+    height:1px;
+    background: var(--panel-edge);
+  }
+
+  .device{
+    width: 360px;
+    max-width: 90vw;
+    background: linear-gradient(160deg, #29261f 0%, var(--panel) 45%, #1b1916 100%);
+    border-radius: 22px;
+    padding: 20px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.05) inset,
+      0 -40px 60px -40px rgba(0,0,0,0.6) inset,
+      0 30px 60px -20px rgba(0,0,0,0.7),
+      0 2px 0 rgba(255,255,255,0.02);
+    border: 1px solid #100f0d;
+    position: relative;
+  }
+
+  .device::before{
+    content:'';
+    position:absolute;
+    top:10px; left:10px; right:10px; bottom:10px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.03);
+    pointer-events:none;
+  }
+
+  /* screen */
+  .screen{
+    background: linear-gradient(180deg, #0c0e09 0%, var(--screen-bg) 100%);
+    border-radius: 10px;
+    padding: 22px 18px 16px;
+    box-shadow:
+      inset 0 3px 10px rgba(0,0,0,0.7),
+      inset 0 0 0 1px #000;
+    position: relative;
+    overflow:hidden;
+    min-height: 118px;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+  }
+
+  .screen::after{
+    /* scanline sheen */
+    content:'';
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(
+      180deg, rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px,
+      transparent 1px, transparent 3px
+    );
+    pointer-events:none;
+  }
+
+  .expression{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--trace);
+    text-shadow: 0 0 8px rgba(79,156,134,0.55);
+    min-height: 18px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: 6px;
+    opacity: 0.85;
+  }
+  .expression::-webkit-scrollbar{ display:none; }
+
+  .result{
+    font-family:'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: clamp(30px, 9vw, 44px);
+    color: var(--amber);
+    text-shadow: 0 0 18px rgba(255,154,77,0.45), 0 0 2px rgba(255,154,77,0.8);
+    text-align: right;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    line-height: 1.1;
+    transition: opacity 0.08s ease;
+  }
+  .result::-webkit-scrollbar{ display:none; }
+
+  .result.flicker{ animation: flick 0.18s steps(2); }
+  @keyframes flick{
+    0%{ opacity: 0.3; }
+    50%{ opacity: 1; }
+    100%{ opacity: 1; }
+  }
+
+  /* trace strip */
+  .trace-strip{
+    height: 3px;
+    margin: 14px 4px 16px;
+    border-radius: 2px;
+    background: var(--trace-dim);
+    position: relative;
+    overflow: hidden;
+  }
+  .trace-strip .pulse{
+    position:absolute;
+    top:0; left:-30%;
+    width: 30%;
+    height:100%;
+    background: linear-gradient(90deg, transparent, var(--trace), transparent);
+    opacity: 0;
+  }
+  .trace-strip.active .pulse{
+    animation: travel 0.6s ease-out;
+  }
+  @keyframes travel{
+    0%{ left:-30%; opacity: 0.9; }
+    100%{ left: 100%; opacity: 0; }
+  }
+
+  /* keypad */
+  .keypad{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  button.key{
+    -webkit-tap-highlight-color: transparent;
+    appearance: none;
+    border: none;
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--key-hi) 0%, var(--key) 100%);
+    border-radius: 12px;
+    height: 58px;
+    cursor: pointer;
+    position: relative;
+    box-shadow:
+      0 3px 0 #17150f,
+      0 5px 8px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.15s ease;
+  }
+
+  button.key:active, button.key.pressed{
+    transform: translateY(3px);
+    box-shadow:
+      0 0 0 #17150f,
+      0 1px 3px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  button.key.op{
+    color: var(--trace);
+    background: linear-gradient(180deg, #2c332f 0%, #232823 100%);
+    font-size: 20px;
+  }
+  button.key.op.active-op{
+    color: var(--screen-bg);
+    background: linear-gradient(180deg, var(--trace) 0%, #3d8672 100%);
+    box-shadow:
+      0 3px 0 #1c342c,
+      0 0 14px rgba(79,156,134,0.5),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+
+  button.key.func{
+    color: var(--danger);
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+
+  button.key.equals{
+    color: var(--screen-bg);
+    background: linear-gradient(180deg, #ffb377 0%, var(--amber) 100%);
+    box-shadow:
+      0 3px 0 var(--amber-dim),
+      0 5px 12px rgba(255,154,77,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.3);
+    font-weight: 700;
+    font-size: 20px;
+  }
+  button.key.equals:active, button.key.equals.pressed{
+    box-shadow:
+      0 0 0 var(--amber-dim),
+      0 2px 6px rgba(255,154,77,0.3);
+  }
+
+  .hint{
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--ink-dim);
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+  .hint kbd{
+    font-family:'JetBrains Mono', monospace;
+    background: var(--panel-edge);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .result.flicker{ animation:none; }
+    .trace-strip.active .pulse{ animation:none; }
+    button.key{ transition:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="rig">
+  <div class="plate">Deepcount — Mk. I</div>
+
+  <div class="device">
+    <div class="screen">
+      <div class="expression" id="expression">&nbsp;</div>
+      <div class="result flicker" id="result">0</div>
+    </div>
+
+    <div class="trace-strip" id="traceStrip"><div class="pulse"></div></div>
+
+    <div class="keypad" id="keypad">
+      <button class="key func" data-action="clear">AC</button>
+      <button class="key func" data-action="backspace">⌫</button>
+      <button class="key func" data-action="percent">%</button>
+      <button class="key op" data-action="op" data-op="÷">÷</button>
+
+      <button class="key" data-action="num" data-num="7">7</button>
+      <button class="key" data-action="num" data-num="8">8</button>
+      <button class="key" data-action="num" data-num="9">9</button>
+      <button class="key op" data-action="op" data-op="×">×</button>
+
+      <button class="key" data-action="num" data-num="4">4</button>
+      <button class="key" data-action="num" data-num="5">5</button>
+      <button class="key" data-action="num" data-num="6">6</button>
+      <button class="key op" data-action="op" data-op="−">−</button>
+
+      <button class="key" data-action="num" data-num="1">1</button>
+      <button class="key" data-action="num" data-num="2">2</button>
+      <button class="key" data-action="num" data-num="3">3</button>
+      <button class="key op" data-action="op" data-op="+">+</button>
+
+      <button class="key func" data-action="negate">±</button>
+      <button class="key" data-action="num" data-num="0">0</button>
+      <button class="key" data-action="decimal">.</button>
+      <button class="key equals" data-action="equals">=</button>
+    </div>
+  </div>
+
+  <div class="hint">keys <kbd>0–9</kbd> <kbd>+ − × ÷</kbd> <kbd>Enter</kbd> <kbd>Esc</kbd> <kbd>Backspace</kbd> work too</div>
+</div>
+
+<script>
+(function(){
+  const resultEl = document.getElementById('result');
+  const exprEl = document.getElementById('expression');
+  const traceStrip = document.getElementById('traceStrip');
+  const keypad = document.getElementById('keypad');
+
+  let current = '0';       // value currently being typed / displayed
+  let previous = null;     // stored operand
+  let operator = null;     // pending operator
+  let justEvaluated = false;
+  let freshInput = false;  // true right after an operator is chosen: next digit starts a new number
+  let expressionText = '';
+
+  const MAX_LEN = 14;
+
+  function formatNumber(numStr){
+    if (numStr === 'Error') return numStr;
+    const num = Number(numStr);
+    if (!isFinite(num)) return 'Error';
+    let s = numStr;
+    if (Math.abs(num) >= 1e12 || (Math.abs(num) < 1e-9 && num !== 0)) {
+      s = num.toExponential(4);
+    } else if (s.length > MAX_LEN) {
+      const decided = num.toPrecision(10).replace(/\.?0+$/,'');
+      s = decided;
+    }
+    return s;
+  }
+
+  function render(flicker){
+    resultEl.textContent = formatNumber(current);
+    exprEl.textContent = expressionText || '\u00A0';
+    if (flicker){
+      resultEl.classList.remove('flicker');
+      void resultEl.offsetWidth;
+      resultEl.classList.add('flicker');
+    }
+    document.querySelectorAll('.op').forEach(b => b.classList.remove('active-op'));
+    if (operator){
+      const btn = keypad.querySelector('.op[data-op="'+operator+'"]');
+      if (btn) btn.classList.add('active-op');
+    }
+  }
+
+  function pulseTrace(){
+    traceStrip.classList.remove('active');
+    void traceStrip.offsetWidth;
+    traceStrip.classList.add('active');
+  }
+
+  function inputDigit(d){
+    if (justEvaluated){
+      current = d;
+      expressionText = '';
+      justEvaluated = false;
+    } else if (freshInput){
+      current = d;
+      freshInput = false;
+    } else if (current === '0'){
+      current = d;
+    } else if (current.replace('-','').replace('.','').length < 15) {
+      current += d;
+    }
+    render(false);
+  }
+
+  function inputDecimal(){
+    if (justEvaluated){
+      current = '0.';
+      expressionText = '';
+      justEvaluated = false;
+      render(false);
+      return;
+    }
+    if (freshInput){
+      current = '0.';
+      freshInput = false;
+      render(false);
+      return;
+    }
+    if (!current.includes('.')) current += '.';
+    render(false);
+  }
+
+  function clearAll(){
+    current = '0';
+    previous = null;
+    operator = null;
+    expressionText = '';
+    justEvaluated = false;
+    freshInput = false;
+    render(true);
+  }
+
+  function backspace(){
+    if (justEvaluated){ clearAll(); return; }
+    if (freshInput){ return; } // nothing typed yet for this operand
+    current = current.length > 1 ? current.slice(0, -1) : '0';
+    render(false);
+  }
+
+  function negate(){
+    if (current === '0') return;
+    current = current.startsWith('-') ? current.slice(1) : '-' + current;
+    freshInput = false;
+    render(false);
+  }
+
+  function percent(){
+    current = String(Number(current) / 100);
+    freshInput = false;
+    render(true);
+  }
+
+  function compute(a, b, op){
+    a = Number(a); b = Number(b);
+    switch(op){
+      case '+': return a + b;
+      case '−': return a - b;
+      case '×': return a * b;
+      case '÷': return b === 0 ? NaN : a / b;
+      default: return b;
+    }
+  }
+
+  function chooseOperator(op){
+    if (operator && previous !== null && !justEvaluated){
+      const r = compute(previous, current, operator);
+      const rStr = isNaN(r) ? 'Error' : String(r);
+      previous = rStr;
+      current = rStr;
+    } else {
+      previous = current;
+    }
+    operator = op;
+    justEvaluated = false;
+    freshInput = true;
+    expressionText = formatNumber(previous) + ' ' + operator;
+    render(true);
+  }
+
+  function equals(){
+    if (operator === null || previous === null) return;
+    const r = compute(previous, current, operator);
+    const rStr = isNaN(r) ? 'Error' : String(r);
+    expressionText = formatNumber(previous) + ' ' + operator + ' ' + formatNumber(current) + ' =';
+    current = rStr;
+    previous = null;
+    operator = null;
+    justEvaluated = true;
+    freshInput = false;
+    pulseTrace();
+    render(true);
+  }
+
+  function pressVisual(btn){
+    if (!btn) return;
+    btn.classList.add('pressed');
+    setTimeout(() => btn.classList.remove('pressed'), 90);
+  }
+
+  keypad.addEventListener('click', (e) => {
+    const btn = e.target.closest('button.key');
+    if (!btn) return;
+    pressVisual(btn);
+    const action = btn.dataset.action;
+    if (action === 'num') inputDigit(btn.dataset.num);
+    else if (action === 'decimal') inputDecimal();
+    else if (action === 'clear') clearAll();
+    else if (action === 'backspace') backspace();
+    else if (action === 'negate') negate();
+    else if (action === 'percent') percent();
+    else if (action === 'op') chooseOperator(btn.dataset.op);
+    else if (action === 'equals') equals();
+  });
+
+  const keyMap = {
+    '+': () => chooseOperator('+'),
+    '-': () => chooseOperator('−'),
+    '*': () => chooseOperator('×'),
+    '/': () => chooseOperator('÷'),
+    'Enter': () => equals(),
+    '=': () => equals(),
+    'Escape': () => clearAll(),
+    'Backspace': () => backspace(),
+    '.': () => inputDecimal(),
+    '%': () => percent(),
+  };
+
+  window.addEventListener('keydown', (e) => {
+    if (/^[0-9]$/.test(e.key)){
+      inputDigit(e.key);
+      const btn = keypad.querySelector('[data-num="'+e.key+'"]');
+      pressVisual(btn);
+      return;
+    }
+    if (keyMap[e.key]){
+      e.preventDefault();
+      keyMap[e.key]();
+      let sel = null;
+      if (e.key === '+') sel = '+';
+      if (e.key === '-') sel = '−';
+      if (e.key === '*') sel = '×';
+      if (e.key === '/') sel = '÷';
+      if (sel) pressVisual(keypad.querySelector('.op[data-op="'+sel+'"]'));
+      if (e.key === 'Enter' || e.key === '=') pressVisual(keypad.querySelector('.equals'));
+      if (e.key === 'Escape') pressVisual(keypad.querySelector('[data-action="clear"]'));
+    }
+  });
+
+  render(false);
+})();
+</script>
+
+</body>
+</html>
